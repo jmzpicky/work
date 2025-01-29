@@ -4,29 +4,48 @@ import csv
 from datetime import datetime
 from dateutil import parser
 
-# Fetch the RSS feed
-url = 'https://news.google.com/rss/search?q=UChicago_Medicine'
-response = requests.get(url)
+# Input and output file paths
+input_csv = 'keywords.csv'
+output_csv = 'news_results.csv'
 
-# Parse the XML content
-root = ET.fromstring(response.content)
+# Define cutoff date
+cutoff_date = datetime(2025, 1, 1).astimezone()  # Ensure timezone-aware
 
-# Define the cutoff date as a timezone-aware datetime
-cutoff_date = datetime(2025, 1, 1).astimezone()  # Make it timezone-aware
+# Open the output CSV for writing
+with open(output_csv, 'w', newline='', encoding='utf-8') as out_file:
+    writer = csv.writer(out_file)
+    writer.writerow(['Keyword', 'Title', 'Link', 'Date'])  # Header row
 
-# Open the CSV file for writing
-with open('news_titles.csv', 'w', newline='', encoding='utf-8') as file:
-    writer = csv.writer(file)
-    writer.writerow(['Title', 'Link', 'Date'])  # Header row
+    # Read keywords from the input CSV
+    with open(input_csv, 'r', newline='', encoding='utf-8-sig') as in_file:  # Handle BOM
+        reader = csv.DictReader(in_file)
+        print(f"CSV Headers: {reader.fieldnames}")  # Debug: Check headers
 
-    for item in root.findall('.//item'):
-        title = item.find('title').text
-        link = item.find('link').text
-        pub_date = parser.parse(item.find('pubDate').text).astimezone()  # Convert to timezone-aware
+        for row in reader:
+            try:
+                keyword = row['Keyword']  # Update this if column name differs
+            except KeyError:
+                print("Error: 'Keyword' column not found. Check the input CSV.")
+                break
 
-        # Only include items from January 2025 onwards
-        if pub_date >= cutoff_date:
-            formatted_date = pub_date.strftime('%Y-%m-%d')
-            writer.writerow([title, link, formatted_date])
+            print(f"Searching for keyword: {keyword}")
 
-print("News titles, links, and dates from January 2025 onwards have been saved to 'news_titles.csv'")
+            # Fetch the RSS feed for the keyword
+            url = f'https://news.google.com/rss/search?q={keyword}'
+            response = requests.get(url)
+
+            # Parse the XML content
+            root = ET.fromstring(response.content)
+
+            # Process each news item in the feed
+            for item in root.findall('.//item'):
+                title = item.find('title').text
+                link = item.find('link').text
+                pub_date = parser.parse(item.find('pubDate').text).astimezone()  # Ensure timezone-aware
+
+                # Filter articles by cutoff date
+                if pub_date >= cutoff_date:
+                    formatted_date = pub_date.strftime('%Y-%m-%d')
+                    writer.writerow([keyword, title, link, formatted_date])
+
+print(f"Results have been saved to '{output_csv}'")
